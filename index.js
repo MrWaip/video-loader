@@ -1,11 +1,10 @@
 const { request } = require("undici");
 const fs = require("fs");
-const { spawn } = require("child_process");
-const { resolve } = require("path");
+const { spawn, exec } = require("child_process");
 // https://d13z5uuzt1wkbz.cloudfront.net/scwxykcqhl/HIDDEN4500-00058.ts
 const url = "https://d13z5uuzt1wkbz.cloudfront.net";
 const id = process.argv[2];
-const chunkSize = 10;
+const chunkSize = 15;
 
 if (!id) throw new Error("Video id must be specified");
 
@@ -68,6 +67,8 @@ async function downloadPart(number) {
 
   await combine(id);
 
+  await clear();
+
   console.log("success");
 })();
 
@@ -83,8 +84,21 @@ async function save(stream, index) {
   return filename;
 }
 
+async function clear() {
+  return new Promise((resolve, reject) => {
+    exec(
+      `find ./tmp -type f -name "*" ! -name "*.mp4" -delete`,
+      (err, data) => {
+        if (err) reject(err);
+
+        resolve(data);
+      }
+    );
+  });
+}
+
 async function combine(id) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const proc = spawn("ffmpeg", [
       "-f",
       "concat",
@@ -97,11 +111,11 @@ async function combine(id) {
       `./tmp/${id}.mp4`,
     ]);
 
-    proc.stdout.on("data", resolve);
+    proc.stdout.on("data", console.log);
 
     proc.stderr.setEncoding("utf8");
 
-    proc.stderr.on("data", resolve);
+    proc.stderr.on("data", console.log);
 
     proc.on("close", resolve);
   });
