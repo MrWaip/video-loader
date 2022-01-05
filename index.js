@@ -1,10 +1,26 @@
 const { request } = require("undici");
 const fs = require("fs");
+const cliProgress = require("cli-progress");
 const { spawn, exec } = require("child_process");
 // https://d13z5uuzt1wkbz.cloudfront.net/scwxykcqhl/HIDDEN4500-00058.ts
 const url = "https://d13z5uuzt1wkbz.cloudfront.net";
 const id = process.argv[2];
 const chunkSize = 15;
+
+// create new progress bar
+const b1 = new cliProgress.SingleBar({
+  format: "{bar} | {percentage}% || {value}/{total} Chunk download started",
+  barCompleteChar: "\u2588",
+  barIncompleteChar: "\u2591",
+  hideCursor: true,
+});
+
+const b2 = new cliProgress.SingleBar({
+  format: "{bar} | {percentage}% || {value}/{total} Saving chunks",
+  barCompleteChar: "\u2588",
+  barIncompleteChar: "\u2591",
+  hideCursor: true,
+});
 
 if (!id) throw new Error("Video id must be specified");
 
@@ -15,16 +31,16 @@ if (!id) throw new Error("Video id must be specified");
  */
 function buildUrl(partNumber) {
   partNumber = partNumber.toString().padStart(5, "0");
-  return `${url}/${id}/HIDDEN4500-${partNumber}.ts`;
+  return `${url}/${id}/HIDDEN2500-${partNumber}.ts`;
 }
 
 async function downloadPart(number) {
-  console.log(`Part ${number} started download`);
-
   const partUrl = buildUrl(number);
   const response = await request(partUrl, {
     // headers: { "accept-encoding": "gzip, deflate, br" },
   });
+
+  b1.increment();
 
   if (response.statusCode === 200) {
     return response;
@@ -42,6 +58,8 @@ async function downloadPart(number) {
   let chunkCount = Math.floor(lastNumber / chunkSize);
   let lastChunkLength = lastNumber % chunkSize;
 
+  b1.start(lastNumber, 0);
+
   while (chunkIndex <= chunkCount) {
     const chunk = [];
     const length = chunkIndex === chunkCount ? lastChunkLength : chunkSize;
@@ -55,11 +73,17 @@ async function downloadPart(number) {
     chunkIndex++;
   }
 
+  b1.stop();
+
+  b2.start(lastNumber, 0);
+
   const partsPromise = parts.map((response, index) =>
     save(response, index + 1)
   );
 
   const paths = await Promise.all(partsPromise);
+
+  b2.stop();
 
   const partList = paths.map((path) => `file '${path}'`).join("\n");
 
@@ -79,7 +103,7 @@ async function save(stream, index) {
 
   await pipe(stream, writeStream);
 
-  console.log(`Part ${index} saved`);
+  b2.increment();
 
   return filename;
 }
