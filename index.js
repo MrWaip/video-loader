@@ -4,43 +4,45 @@ const cliProgress = require("cli-progress");
 const { spawn, exec } = require("child_process");
 // https://d13z5uuzt1wkbz.cloudfront.net/scwxykcqhl/HIDDEN4500-00058.ts
 const url = "https://d13z5uuzt1wkbz.cloudfront.net";
-const id = process.argv[2];
 const chunkSize = 15;
+const inputFile = process.argv[2];
+
+if (!inputFile) throw new Error("inputFile must be specified");
 
 // create new progress bar
 const b1 = new cliProgress.SingleBar({
-  format: "{bar} | {percentage}% || {value}/{total} Chunk download started",
+  format: "{bar} | {percentage}% || {value}/{total} Chunk download",
   barCompleteChar: "\u2588",
   barIncompleteChar: "\u2591",
   hideCursor: true,
 });
 
-const b2 = new cliProgress.SingleBar({
-  format: "{bar} | {percentage}% || {value}/{total} Saving chunks",
-  barCompleteChar: "\u2588",
-  barIncompleteChar: "\u2591",
-  hideCursor: true,
-});
+(async () => {
+  const ids = fs.readFileSync(inputFile, { encoding: "utf-8" }).split("\n");
 
-if (!id) throw new Error("Video id must be specified");
+  for (const id of ids) {
+    try {
+      await saveVideo(id);
+    } catch (error) {
+      console.error(error);
+      console.log(`Video with id ${id} is failed`);
+    }
+  }
+})();
 
 /**
  *
  * @param {number} partNumber
  * @returns
  */
-function buildUrl(partNumber) {
+function buildUrl(partNumber, id) {
   partNumber = partNumber.toString().padStart(5, "0");
   return `${url}/${id}/HIDDEN2500-${partNumber}.ts`;
 }
 
-async function downloadPart(number) {
-  const partUrl = buildUrl(number);
-  const response = await request(partUrl, {
-    // headers: { "accept-encoding": "gzip, deflate, br" },
-  });
-
-  b1.increment();
+async function downloadPart(number, id) {
+  const partUrl = buildUrl(number, id);
+  const response = await request(partUrl);
 
   if (response.statusCode === 200) {
     return response;
@@ -49,11 +51,12 @@ async function downloadPart(number) {
   }
 }
 
-(async () => {
-  const lastNumber = await getLastPartNumber();
+async function saveVideo(videoId) {
+  console.log(`Video with id ${videoId} started`);
+  const lastNumber = await getLastPartNumber(videoId);
   console.log(`Last part number is: ${lastNumber}`);
 
-  const parts = [];
+  const paths = [];
   let chunkIndex = 0;
   let chunkCount = Math.floor(lastNumber / chunkSize);
   let lastChunkLength = lastNumber % chunkSize;
@@ -61,49 +64,53 @@ async function downloadPart(number) {
   b1.start(lastNumber, 0);
 
   while (chunkIndex <= chunkCount) {
-    const chunk = [];
     const length = chunkIndex === chunkCount ? lastChunkLength : chunkSize;
+    const chunk = [];
 
     for (let i = 1; i <= length; i++) {
       const partNumber = chunkIndex * chunkSize + i;
-      chunk.push(downloadPart(partNumber));
+
+      chunk.push(downloadPart(partNumber, videoId));
     }
 
-    parts.push(...(await Promise.all(chunk)).map((response) => response.body));
+    const chunkResults = (await Promise.all(chunk)).map(
+      (response) => response.body
+    );
+
+    paths.push(
+      ...(await Promise.all(
+        chunkResults.map((response, i) =>
+          save(response, chunkIndex * chunkSize + i + 1, videoId)
+        )
+      ))
+    );
+
     chunkIndex++;
   }
 
   b1.stop();
 
-  b2.start(lastNumber, 0);
-
-  const partsPromise = parts.map((response, index) =>
-    save(response, index + 1)
-  );
-
-  const paths = await Promise.all(partsPromise);
-
-  b2.stop();
-
   const partList = paths.map((path) => `file '${path}'`).join("\n");
+
+  console.log(partList);
 
   fs.writeFileSync("./tmp/list.txt", partList, { encoding: "utf-8" });
 
-  await combine(id);
+  await combine(videoId);
 
   await clear();
 
   console.log("success");
-})();
+}
 
-async function save(stream, index) {
-  const filename = `output_${index}.ts`;
+async function save(stream, index, id) {
+  const filename = `output_${id}_${index}.ts`;
   const outputDir = `./tmp/${filename}`;
   const writeStream = fs.createWriteStream(outputDir);
 
   await pipe(stream, writeStream);
 
-  b2.increment();
+  b1.increment();
 
   return filename;
 }
@@ -124,6 +131,7 @@ async function clear() {
 async function combine(id) {
   return new Promise((resolve, reject) => {
     const proc = spawn("ffmpeg", [
+      "-y",
       "-f",
       "concat",
       "-safe",
@@ -132,7 +140,7 @@ async function combine(id) {
       "./tmp/list.txt",
       "-c",
       "copy",
-      `./tmp/${id}.mp4`,
+      `./video/${id}.mp4`,
     ]);
 
     proc.stdout.on("data", console.log);
@@ -153,9 +161,9 @@ function pipe(inStream, outStream) {
   });
 }
 
-async function getLastPartNumber() {
+async function getLastPartNumber(id) {
   return await binarySearch(async (number) => {
-    const url = buildUrl(number);
+    const url = buildUrl(number, id);
     const res = await request(url);
 
     if (res.statusCode === 200) {
