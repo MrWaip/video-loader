@@ -5,9 +5,9 @@ const { spawn, exec } = require("child_process");
 // https://d13z5uuzt1wkbz.cloudfront.net/scwxykcqhl/HIDDEN4500-00058.ts
 const url = "https://d13z5uuzt1wkbz.cloudfront.net";
 const chunkSize = 15;
-const inputFile = process.argv[2];
-
-if (!inputFile) throw new Error("inputFile must be specified");
+const courses = require("./download.json");
+const { join } = require("path");
+const { tmpdir } = require("os");
 
 // create new progress bar
 const b1 = new cliProgress.SingleBar({
@@ -18,14 +18,15 @@ const b1 = new cliProgress.SingleBar({
 });
 
 (async () => {
-  const ids = fs.readFileSync(inputFile, { encoding: "utf-8" }).split("\n");
-
-  for (const id of ids) {
-    try {
-      await saveVideo(id);
-    } catch (error) {
-      console.error(error);
-      console.log(`Video with id ${id} is failed`);
+  for (const course of courses) {
+    console.log(`Started download course ${course.name}`);
+    for (const video of course.videos) {
+      try {
+        await saveVideo(video, course);
+      } catch (error) {
+        console.error(error);
+        console.log(`Download video with name ${video.name} is failed`);
+      }
     }
   }
 })();
@@ -51,9 +52,9 @@ async function downloadPart(number, id) {
   }
 }
 
-async function saveVideo(videoId) {
-  console.log(`Video with id ${videoId} started`);
-  const lastNumber = await getLastPartNumber(videoId);
+async function saveVideo(video, course) {
+  console.log(`Video with name ${video.name} started`);
+  const lastNumber = await getLastPartNumber(video.id);
   console.log(`Last part number is: ${lastNumber}`);
 
   const paths = [];
@@ -70,7 +71,7 @@ async function saveVideo(videoId) {
     for (let i = 1; i <= length; i++) {
       const partNumber = chunkIndex * chunkSize + i;
 
-      chunk.push(downloadPart(partNumber, videoId));
+      chunk.push(downloadPart(partNumber, video.id));
     }
 
     const chunkResults = (await Promise.all(chunk)).map(
@@ -80,7 +81,7 @@ async function saveVideo(videoId) {
     paths.push(
       ...(await Promise.all(
         chunkResults.map((response, i) =>
-          save(response, chunkIndex * chunkSize + i + 1, videoId)
+          save(response, chunkIndex * chunkSize + i + 1, video.id)
         )
       ))
     );
@@ -96,7 +97,7 @@ async function saveVideo(videoId) {
 
   fs.writeFileSync("./tmp/list.txt", partList, { encoding: "utf-8" });
 
-  await combine(videoId);
+  await combine(video, course);
 
   await clear();
 
@@ -105,14 +106,14 @@ async function saveVideo(videoId) {
 
 async function save(stream, index, id) {
   const filename = `output_${id}_${index}.ts`;
-  const outputDir = `./tmp/${filename}`;
+  const outputDir = join(tmpdir(), filename);
   const writeStream = fs.createWriteStream(outputDir);
 
   await pipe(stream, writeStream);
 
   b1.increment();
 
-  return filename;
+  return outputDir;
 }
 
 async function clear() {
@@ -128,8 +129,10 @@ async function clear() {
   });
 }
 
-async function combine(id) {
-  return new Promise((resolve, reject) => {
+async function combine(video, course) {
+  const name = `${course.number}:${video.number} ${video.name} (${video.id})`;
+
+  return new Promise((resolve) => {
     const proc = spawn("ffmpeg", [
       "-y",
       "-f",
@@ -140,7 +143,9 @@ async function combine(id) {
       "./tmp/list.txt",
       "-c",
       "copy",
-      `./video/${id}.mp4`,
+      `./video/${name}.mp4`,
+      "-metadata",
+      `description="${course.name}"`,
     ]);
 
     proc.stdout.on("data", console.log);
