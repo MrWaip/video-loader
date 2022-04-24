@@ -20,9 +20,14 @@ const b1 = new cliProgress.SingleBar({
 (async () => {
   for (const course of courses) {
     console.log(`Started download course ${course.name}`);
+
+    const dir = `./video/${course.name}`;
+
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
     for (const video of course.videos) {
       try {
-        await saveVideo(video, course);
+        await saveVideo(video, course, dir);
       } catch (error) {
         console.error(error);
         console.log(`Download video with name ${video.name} is failed`);
@@ -52,7 +57,7 @@ async function downloadPart(number, id) {
   }
 }
 
-async function saveVideo(video, course) {
+async function saveVideo(video, course, courseDir) {
   console.log(`Video with name ${video.name} started`);
   const lastNumber = await getLastPartNumber(video.id);
   console.log(`Last part number is: ${lastNumber}`);
@@ -97,7 +102,7 @@ async function saveVideo(video, course) {
 
   fs.writeFileSync("./tmp/list.txt", partList, { encoding: "utf-8" });
 
-  await combine(video, course);
+  await combine(video, course, courseDir);
 
   await clear();
 
@@ -129,8 +134,10 @@ async function clear() {
   });
 }
 
-async function combine(video, course) {
-  const name = `${course.number}:${video.number} ${video.name} (${video.id})`;
+async function combine(video, course, courseDir) {
+  const number = `${video.number}`.padStart(2, "0");
+  const name = `${number} ${video.name} (${video.id})`;
+  const outputFile = `${courseDir}/${name}.mp4`;
 
   return new Promise((resolve) => {
     const proc = spawn("ffmpeg", [
@@ -143,7 +150,7 @@ async function combine(video, course) {
       "./tmp/list.txt",
       "-c",
       "copy",
-      `./video/${name}.mp4`,
+      outputFile,
       "-metadata",
       `description="${course.name}"`,
     ]);

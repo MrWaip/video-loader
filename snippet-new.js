@@ -10,13 +10,14 @@ scData.videosToCourses[course.title].chapters[0].vids.forEach(({ uuid }) =>
 
 let rawVideos = scData.videos.filter(({ uuid }) => videoIds.has(uuid));
 let videos = [];
+let i = 1;
 
-for (const [index, videoId] of videoIds.entries()) {
-  const video  = rawVideos.find(({ uuid }) => uuid === videoId);
+for (const videoId of videoIds.values()) {
+  const video = rawVideos.find(({ uuid }) => uuid === videoId);
   videos.push({
     id: video.uuid,
     name: video.title,
-    number: index + 1
+    number: i++,
   });
 }
 
@@ -24,6 +25,6 @@ const playlist = {
   name: course.title,
   number: courseId,
   videos,
-}
+};
 
-JSON.stringify(playlist);
+playlist;
