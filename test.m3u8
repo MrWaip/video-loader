@@ -1,0 +1,12 @@
+#EXTM3U
+#EXT-X-PLAYLIST-TYPE:VOD
+#EXT-X-TARGETDURATION:10
+#EXTINF:10,
+https://d13z5uuzt1wkbz.cloudfront.net/dkm5fx04c8/HIDDEN4500-00001.ts
+#EXTINF:10,
+https://d13z5uuzt1wkbz.cloudfront.net/dkm5fx04c8/HIDDEN4500-00002.ts
+#EXTINF:10,
+https://d13z5uuzt1wkbz.cloudfront.net/dkm5fx04c8/HIDDEN4500-00003.ts
+#EXTINF:9,
+https://d13z5uuzt1wkbz.cloudfront.net/dkm5fx04c8/HIDDEN4500-00004.ts
+#EXT-X-ENDLIST
