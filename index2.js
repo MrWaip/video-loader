@@ -13,7 +13,7 @@ const MAIN_DIR = "/Users/klobkov/SkillCappedVideos/";
   for (const course of courses) {
     console.log(`Started download course ${course.name}`);
 
-    const courseDir = `${MAIN_DIR}/videos/${course.name}`;
+    const courseDir = `${MAIN_DIR}/${course.name}`;
 
     if (!fs.existsSync(courseDir)) fs.mkdirSync(courseDir, { recursive: true });
 
