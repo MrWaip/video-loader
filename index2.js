@@ -7,17 +7,19 @@ const courses = require("./download.json");
 
 const template = fs.readFileSync("./template.m3u8").toString("utf-8");
 
+const MAIN_DIR = "/Users/klobkov/SkillCappedVideos/";
+
 (async () => {
   for (const course of courses) {
     console.log(`Started download course ${course.name}`);
 
-    const dir = `./video/${course.name}`;
+    const courseDir = `${MAIN_DIR}/videos/${course.name}`;
 
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    if (!fs.existsSync(courseDir)) fs.mkdirSync(courseDir, { recursive: true });
 
     for (const video of course.videos) {
       try {
-        await saveVideo(video, course, dir);
+        await saveVideo(video, course, courseDir);
       } catch (error) {
         console.error(error);
         console.log(`Download video with name ${video.name} is failed`);
@@ -41,28 +43,27 @@ async function saveVideo(video, course, courseDir) {
   const lastNumber = await getLastPartNumber(video.id);
   console.log(`Last part number is: ${lastNumber}`);
 
-  let result = new Array(lastNumber)
+  let m3u8Content = new Array(lastNumber)
     .fill()
     .map((_, number) => {
       return buildUrl(number + 1, video.id);
     })
     .join("\n#EXTINF:10,\n");
 
-  result = template.replace(/{{data}}/g, result);
+  m3u8Content = template.replace(/{{data}}/g, m3u8Content);
 
-  const m3u8Path = `./tmp/${video.id}.m3u8`;
-
-  fs.writeFileSync(m3u8Path, result, { encoding: "utf-8" });
-
-  await combine(video, course, courseDir, m3u8Path);
+  await combine(video, course, courseDir, m3u8Content);
 
   console.log("success");
 }
 
-async function combine(video, course, courseDir, m3u8Path) {
+async function combine(video, course, courseDir, m3u8Content) {
   const number = `${video.number}`.padStart(2, "0");
   const name = `${number} ${video.name} (${video.id})`;
   const outputFile = `${courseDir}/${name}.mp4`;
+  const m3u8Path = `${courseDir}/${name}.m3u8`;
+
+  fs.writeFileSync(m3u8Path, m3u8Content, { encoding: "utf-8", flag: "a+" });
 
   return new Promise((resolve) => {
     const proc = spawn("ffmpeg", [
